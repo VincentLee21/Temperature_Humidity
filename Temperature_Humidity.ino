@@ -8,6 +8,8 @@
 
 #include "DEV_Debug.h"
 #include "DEV_Config.h"
+#include "draw_util.h"
+
 
 #ifdef ESP_IDF_VERSION_MAJOR // IDF 4+
 #if CONFIG_IDF_TARGET_ESP32 // ESP32/PICO-D4
@@ -31,13 +33,20 @@
 
 #define FF17 &FreeSans9pt7b
 #define FF18 &FreeSans12pt7b
-#define FF19 &FreeSans18pt7b
+// #define FF19 &FreeSans18pt7b
+#define FF19 &FreeSerif18pt7b
 #define FF20 &FreeSans24pt7b
 
 TFT_eSPI tft = TFT_eSPI();
 TFT_eSprite img = TFT_eSprite(&tft);
 volatile bool bUpdate = false;
 // Ticker ticker;
+uint16_t tmpRBColor[10];
+
+drawMeterWidget meterTemp;
+drawMeterWidget meterHumi;
+drawMeterWidget meterPress;
+
 
 float temp(NAN), hum(NAN), pres(NAN);
 BME280::TempUnit tempUnit(BME280::TempUnit_Celsius);
@@ -130,6 +139,21 @@ void setup() {
     );
 
   img.pushSprite(0, 0);
+  meterTemp.Initialize( &img, 30, 8, true, // TFT_eSprite *ptrImg, int radius, int width, bool gradient,
+                  -10.0, 50.0, // float min_val, float max_val
+                  135, 360, // uint32_t _start_angle, uint32_t _end_angle,
+                  TFT_SKYBLUE, TFT_RED, TFT_DARKGREY, TFT_WHITE); // uint32_t fg1_color, uint32_t fg2_color, uint32_t bar_bg_color, uint32_t bg_color);
+
+  meterHumi.Initialize( &img, 30, 8, true, // TFT_eSprite *ptrImg, int radius, int width, bool gradient,
+                  0.0, 100.0, // float min_val, float max_val
+                  135, 360, // uint32_t _start_angle, uint32_t _end_angle,
+                  TFT_GREENYELLOW, TFT_RED, TFT_DARKGREY, TFT_WHITE); // uint32_t fg1_color, uint32_t fg2_color, uint32_t bar_bg_color, uint32_t bg_color);
+
+  meterPress.Initialize( &img, 30, 8, false, // TFT_eSprite *ptrImg, int radius, int width, bool gradient,
+                  1000.0, 1200.0, // float min_val, float max_val
+                  135, 360, // uint32_t _start_angle, uint32_t _end_angle,
+                  TFT_GREENYELLOW, TFT_RED, TFT_DARKGREY, TFT_WHITE); // uint32_t fg1_color, uint32_t fg2_color, uint32_t bar_bg_color, uint32_t bg_color);
+
 }
 
 void TaskRead_BME280(void *pvParameters) {
@@ -137,6 +161,7 @@ void TaskRead_BME280(void *pvParameters) {
 
   while( 1) {
     bme.read(pres, temp, hum, tempUnit, presUnit);
+    pres = pres * 0.01; // Pa -> mb
     bUpdate = true;
     usleep(1000000); // 1s
   }
@@ -144,21 +169,39 @@ void TaskRead_BME280(void *pvParameters) {
 
 void loop() {
   // put your main code here, to run repeatedly:
-  int x = 20, y, dy = 30;
+  int x = 60, y, dy = 80;
+  String str;
+
   if( bUpdate) {
     img.fillScreen(TFT_WHITE);
-    img.setFreeFont(FF19);
 
     y = 80;
-    String str = String("T. ") + String( temp, 1) + String(tempUnit == BME280::TempUnit_Celsius ? 'C' :'F');
-    img.drawString(str, x, y, GFXFF);
+
+    // ------------------------
+    // Draw temperate value
+    str = String( temp, 1) + String(tempUnit == BME280::TempUnit_Celsius ? 'c' :'F');
+    meterTemp.draw( x, y, // int x, int y,
+                   temp, // float value,
+                   TFT_BLACK, str); // uint32_t font_color, String string
     y+=dy;
-    str = String("H. ") + String( hum, 1) + String("RH");
-    img.drawString(str, x, y, GFXFF);
-    y+=dy;
-    str = String("P. ") + String(pres*0.01, 1) + String("mb");
-    img.drawString(str, x, y, GFXFF);
-    y+=dy;
+    // ------------------------
+
+    // ------------------------
+    // Draw humidity value
+    str = String( hum, 0) + String("%");
+    meterHumi.draw( x, y, // int x, int y,
+                   hum, // float value,
+                   TFT_BLACK, str); // uint32_t font_color, String string
+    // y+=dy;
+    // ------------------------
+
+    // ------------------------
+    // Draw pressure value
+    str = String(pres, 1) + String("mb");
+    meterPress.draw( x+80, y, // int x, int y,
+                    pres, // float value,
+                    TFT_BLACK, str); // uint32_t font_color, String string
+    // ------------------------
 
     bUpdate = false;
     img.pushSprite(0, 0);
@@ -166,3 +209,4 @@ void loop() {
 
   usleep(100);
 }
+
